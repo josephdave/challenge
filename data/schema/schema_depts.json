@@ -1,0 +1,17 @@
+{
+  "type": "struct",
+  "fields": [
+    {
+      "name": "id",
+      "type": "integer",
+      "nullable": false,
+      "metadata": {}
+    },
+    {
+      "name": "department",
+      "type": "string",
+      "nullable": true,
+      "metadata": {}
+    }
+  ]
+}

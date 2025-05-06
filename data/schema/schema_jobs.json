@@ -1,0 +1,18 @@
+{
+    "type": "struct",
+    "fields": [
+      {
+        "name": "id",
+        "type": "integer",
+        "nullable": false,
+        "metadata": {}
+      },
+      {
+        "name": "job",
+        "type": "string",
+        "nullable": true,
+        "metadata": {}
+      }
+    ]
+  }
+  

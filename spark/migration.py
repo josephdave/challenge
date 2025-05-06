@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 from pyspark.sql.types import TimestampType
+import json
 
 from pyspark.sql.types import (
     StructType, StructField,
@@ -43,7 +44,10 @@ def migrate_csv_to_sql(csv_path: str, table_name: str,schema=None):
         properties=props
     )
 
-
+def load_schema_from_json(path: str) -> StructType:
+    with open(path, "r", encoding="utf-8") as f:
+        schema_dict = json.load(f)
+    return StructType.fromJson(schema_dict)
     
 if __name__ == "__main__":
     # Parámetros tomados de variables de entorno (MySQL)
@@ -53,13 +57,14 @@ if __name__ == "__main__":
     load_dotenv(dotenv_path=dotenv_path)
 
     #MIGRACION DE EMPLEADOS
-    schema_hired = StructType([
-        StructField("id", IntegerType(), False),
-        StructField("name", StringType(), True),
-        StructField("datetime", TimestampType(), True),
-        StructField("department_id", IntegerType(), True),
-        StructField("job_id", IntegerType(), True),
-    ])
+    schema_hired = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_hired.json"),)
+    # schema_hired = StructType([
+    #     StructField("id", IntegerType(), False),
+    #     StructField("name", StringType(), True),
+    #     StructField("datetime", TimestampType(), True),
+    #     StructField("department_id", IntegerType(), True),
+    #     StructField("job_id", IntegerType(), True),
+    # ])
 
     migrate_csv_to_sql(
         csv_path=os.path.join(os.getenv("CSV_PATH", "data/csv"), "hired_employees.csv"),
@@ -68,10 +73,11 @@ if __name__ == "__main__":
     )
 
     # MIGRACION DE DEPARTAMENTOS
-    schema_depts = StructType([
-        StructField("id", IntegerType(), False),
-        StructField("department", StringType(), True),
-    ])
+    schema_depts = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_depts.json"),)
+    # schema_depts = StructType([
+    #     StructField("id", IntegerType(), False),
+    #     StructField("department", StringType(), True),
+    # ])
     
     migrate_csv_to_sql(
         csv_path=os.path.join(os.getenv("CSV_PATH", "data/csv"), "departments.csv"),
@@ -79,10 +85,12 @@ if __name__ == "__main__":
         schema=schema_depts
     )
 
-    schema_jobs = StructType([
-        StructField("id", IntegerType(), False),
-        StructField("job", StringType(), True),
-    ])
+    # MIGRACION DE CARGOS
+    schema_jobs = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_jobs.json"),)
+    # schema_jobs = StructType([
+    #     StructField("id", IntegerType(), False),
+    #     StructField("job", StringType(), True),
+    # ])
 
     migrate_csv_to_sql(
         csv_path=os.path.join(os.getenv("CSV_PATH", "data/csv"), "jobs.csv"),

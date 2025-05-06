@@ -1,0 +1,36 @@
+{
+    "type": "struct",
+    "fields": [
+      {
+        "name": "id",
+        "type": "integer",
+        "nullable": false,
+        "metadata": {}
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "nullable": true,
+        "metadata": {}
+      },
+      {
+        "name": "datetime",
+        "type": "timestamp",
+        "nullable": true,
+        "metadata": {}
+      },
+      {
+        "name": "department_id",
+        "type": "integer",
+        "nullable": true,
+        "metadata": {}
+      },
+      {
+        "name": "job_id",
+        "type": "integer",
+        "nullable": true,
+        "metadata": {}
+      }
+    ]
+  }
+  
