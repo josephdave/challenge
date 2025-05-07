@@ -125,6 +125,7 @@ The API will be available at `http://127.0.0.1:8000`.
   ```
 
 #### **Report: Hiring Quarterly (HTML)**
+![Image](https://github.com/user-attachments/assets/520d633a-8441-45b8-a46c-fecb931d55bb)
 - **GET** `/reports/hiring.html`
 - **Description**: Generate a visual report (stacked bar chart) of hires per quarter by department for a specific year.
 - **Query Parameters**:
@@ -146,6 +147,7 @@ The API will be available at `http://127.0.0.1:8000`.
   ```
 
 #### **Report: Departments Above Average (HTML)**
+![Image](https://github.com/user-attachments/assets/2c0e04f1-b116-46d7-9fe6-440c91076120)
 - **GET** `/reports/departments_above_average.html`
 - **Description**: Generate a visual report (pie chart) of departments with above-average hires for a specific year.
 - **Query Parameters**:
