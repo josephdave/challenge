@@ -1,3 +1,4 @@
+
 from datetime import datetime, timedelta
 import os
 import sys
@@ -5,7 +6,9 @@ import json
 from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, Query, status
+from fastapi.responses import HTMLResponse
+from pyspark.sql.functions import year, quarter, col
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field, model_validator
@@ -14,6 +17,11 @@ from pyspark.sql.types import StructType
 from pyspark.sql.types import TimestampType
 from pyspark.sql.functions import to_timestamp, col
 from spark.backup_service import backup_table, list_backup_timestamps, restore_table 
+import pandas as pd
+import matplotlib.pyplot as plt
+import io
+import base64
+import numpy as np 
 
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
@@ -245,3 +253,119 @@ async def restore_from_backup(table_name: str, timestamp: str):
     except Exception as e:
         raise HTTPException(500, detail=f"Restore failed: {e}")
     return {"status": "success", "table": table_name, "restored_from": timestamp}
+
+# -----------------------------------------------------------------------------
+# /report hiring_quarterly
+# -----------------------------------------------------------------------------
+def get_hiring_quarterly_data(year_int: int) -> List[dict]:
+    """
+    Synchronous helper that returns exactly:
+      [ {"department":…, "job":…, "quarter":…, "count":…}, … ]
+    """
+    jdbc_url = os.getenv("DATABASE_URL")
+    props = {
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASS", ""),
+        "driver": "com.mysql.cj.jdbc.Driver"
+    }
+    subq = """
+      (SELECT he.datetime, d.department, j.job
+       FROM hired_employees he
+       JOIN departments d ON he.department_id = d.id
+       JOIN jobs j        ON he.job_id        = j.id
+      ) AS subq
+    """
+
+    df = (
+        spark.read
+             .jdbc(url=jdbc_url, table=subq, properties=props)
+             .filter(year(col("datetime")) == year_int)
+             .withColumn("quarter", quarter(col("datetime")))
+             .groupBy("department", "job", "quarter")
+             .count()
+             .orderBy("department", "job", "quarter")
+    )
+
+    # This **must** run and return a list (even if empty)
+    return [row.asDict() for row in df.collect()]
+
+@app.get("/metrics/hiring_quarterly/{target_year}", dependencies=[Depends(get_current_user)])
+async def hiring_quarterly(target_year: int):
+    data = get_hiring_quarterly_data(target_year)
+    return {"year": target_year, "data": data}
+
+@app.get(
+    "/reports/hiring.html",
+    response_class=HTMLResponse
+)
+async def hiring_quarterly_report_html(
+    year: int = Query(2021, description="Year to report on")
+):
+    # 1) Reuse your existing helper
+    data = get_hiring_quarterly_data(year)
+
+    # 2) Build DataFrame
+    df = pd.DataFrame(data)
+    if df.empty:
+        return HTMLResponse(f"""
+        <html><body>
+          <h1>No hiring data found for {year}</h1>
+        </body></html>
+        """, status_code=200)
+
+    # 3) Pivot: index=quarter, columns=department, values=sum(count)
+    pivot = df.pivot_table(
+        index="quarter",
+        columns="department",
+        values="count",
+        aggfunc="sum",
+        fill_value=0
+    ).sort_index()
+
+    # 4) Plot stacked bar chart
+    quarters = pivot.index.tolist()
+    departments = pivot.columns.tolist()
+    bottoms = np.zeros(len(quarters))
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for dept in departments:
+        ax.bar(
+            quarters,
+            pivot[dept],
+            bottom=bottoms,
+            label=dept
+        )
+        bottoms += pivot[dept].values
+
+    ax.set_xticks(quarters)
+    ax.set_xlabel("Quarter")
+    ax.set_ylabel("Number of Hires")
+    ax.set_title(f"Number of Hires per Quarter by Department ({year})")
+    ax.legend(title="Department", bbox_to_anchor=(1, 0.5))
+    plt.tight_layout()
+
+    # 5) Render to PNG in memory and base64-encode
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100)
+    plt.close(fig)
+    buf.seek(0)
+    img_b64 = base64.b64encode(buf.read()).decode("ascii")
+
+    # 6) Return HTML with embedded image
+    html = f"""
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <title>Hiring Quarterly Report</title>
+        <style>
+          body {{ font-family: sans-serif; margin: 2rem; }}
+          img {{ max-width: 100%; height: auto; }}
+        </style>
+      </head>
+      <body>
+        <h1>Hiring Quarterly Report ({year})</h1>
+        <img src="data:image/png;base64,{img_b64}" alt="Hiring Quarterly Report">
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
