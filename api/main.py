@@ -369,3 +369,120 @@ async def hiring_quarterly_report_html(
     </html>
     """
     return HTMLResponse(content=html)
+
+# -----------------------------------------------------------------------------
+# /report departments
+# -----------------------------------------------------------------------------
+def get_departments_above_average(year_int: int) -> List[dict]:
+    """
+    Returns:
+      [
+        {"id": 1, "department": "Maintenance", "count": 42},
+        ...
+      ]
+    for departments whose 2021 hires > average hires across all departments.
+    """
+    jdbc_url = os.getenv("DATABASE_URL")
+    props = {
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASS", ""),
+        "driver": "com.mysql.cj.jdbc.Driver"
+    }
+
+    subq = """
+      (SELECT he.datetime,
+              d.id AS dept_id,
+              d.department
+       FROM hired_employees he
+       JOIN departments d
+         ON he.department_id = d.id
+      ) AS subq
+    """
+
+    df = (
+        spark.read
+             .jdbc(url=jdbc_url, table=subq, properties=props)
+             # filter by year
+             .filter(year(col("datetime")) == year_int)
+    )
+
+    # aggregate per department
+    agg = df.groupBy("dept_id", "department") \
+            .count() \
+            .withColumnRenamed("count", "hires")
+
+    # compute mean
+    mean_val = agg.agg({"hires": "avg"}).collect()[0][0]
+
+    # filter above average, order desc
+    above = (
+        agg.filter(col("hires") > mean_val)
+           .orderBy(col("hires").desc())
+    )
+
+    return [
+        {"id": row["dept_id"], "department": row["department"], "count": row["hires"]}
+        for row in above.collect()
+    ]
+
+@app.get(
+    "/metrics/departments_above_average/{year_int}",
+    dependencies=[Depends(get_current_user)]
+)
+async def metrics_departments_above_average(year_int: int):
+    data = get_departments_above_average(year_int)
+    return {"year": year_int, "data": data}
+
+@app.get(
+    "/reports/departments_above_average.html",
+    response_class=HTMLResponse
+)
+async def departments_above_average_report_html(
+    year: int = Query(2021, description="Year to report on")
+):
+    data = get_departments_above_average(year)
+    if not data:
+        return HTMLResponse(f"""
+        <html><body>
+          <h1>No data found for {year}</h1>
+        </body></html>
+        """, status_code=200)
+
+    # build DataFrame
+    df = pd.DataFrame(data)
+
+    # pie chart
+    fig, ax = plt.subplots(figsize=(6,6))
+    ax.pie(
+        df["count"],
+        labels=df["department"],
+        autopct="%1.1f%%",
+        startangle=90
+    )
+    ax.axis("equal")
+    ax.set_title(f"Departments Above Average Hires in {year}")
+
+    # render to base64
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100)
+    plt.close(fig)
+    buf.seek(0)
+    img_b64 = base64.b64encode(buf.read()).decode("ascii")
+
+    html = f"""
+    <html>
+      <head>
+        <meta charset="utf-8"/>
+        <title>Departments Above Average Hires</title>
+        <style>
+          body {{ font-family: sans-serif; margin:2rem; }}
+          img {{ max-width: 100%; height: auto; }}
+        </style>
+      </head>
+      <body>
+        <h1>Departments Above Average Hires ({year})</h1>
+        <img src="data:image/png;base64,{img_b64}" alt="Pie chart of departments">
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
