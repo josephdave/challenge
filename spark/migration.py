@@ -57,7 +57,7 @@ if __name__ == "__main__":
     load_dotenv(dotenv_path=dotenv_path)
 
     #MIGRACION DE EMPLEADOS
-    schema_hired = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_hired.json"),)
+    schema_hired = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_hired_employees.json"),)
     # schema_hired = StructType([
     #     StructField("id", IntegerType(), False),
     #     StructField("name", StringType(), True),
