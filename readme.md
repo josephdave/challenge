@@ -1,4 +1,3 @@
-```markdown
 # Data Migration and Backup API
 
 This project provides a FastAPI-based service for data ingestion, backup, and restoration using PySpark and MySQL. It includes functionality to migrate CSV data to a MySQL database, perform backups, and restore data from backups.
@@ -40,7 +39,6 @@ This project provides a FastAPI-based service for data ingestion, backup, and re
    SPARK_MYSQL_JAR=C:\spark-3.5.5-bin-hadoop3\jars\mysql-connector-j-8.0.33.jar
    SCHEMA_PATH=data/schema
    CSV_PATH=data/csv
-   ```
 
 4. Place your schema JSON files in the `data/schema` directory and your CSV files in the `data/csv` directory.
 
