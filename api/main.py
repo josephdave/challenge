@@ -1,10 +1,13 @@
+from datetime import datetime, timedelta
 import os
 import sys
 import json
 from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
 from pydantic import BaseModel, Field, model_validator
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
@@ -32,6 +35,62 @@ spark = (
 basedir = Path(__file__).resolve().parent
 env_path = basedir / '.env'
 load_dotenv(dotenv_path=env_path)
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+USER = os.getenv("USER")
+PASSWORD = os.getenv("PASSWORD")
+
+print(USER)
+print(PASSWORD)
+
+if not (SECRET_KEY and USER and PASSWORD):
+    raise RuntimeError("SECRET_KEY, USER, and PASSWORD must be set in .env")
+
+
+# -----------------------------------------------------------------------------
+# JWT & OAuth2 setup
+# -----------------------------------------------------------------------------
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def create_access_token(sub: str, expires_delta: timedelta):
+    to_encode = {"sub": sub, "exp": datetime.utcnow() + expires_delta}
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user = payload.get("sub")
+        if user != USER:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    return user
+
+# -----------------------------------------------------------------------------
+# token endpoint
+# -----------------------------------------------------------------------------
+app = FastAPI(title="Simplified Secure API")
+
+@app.post("/token")
+async def login(form: OAuth2PasswordRequestForm = Depends()):
+    if form.username != USER or form.password != PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = create_access_token(
+        sub=USER,
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    return {"access_token": token, "token_type": "bearer"}
 
 
 SCHEMA_DIR = os.getenv("SCHEMA_PATH", "data/schema")
@@ -69,7 +128,7 @@ class IngestRequest(BaseModel):
 # /ingest
 # -----------------------------------------------------------------------------
 
-@app.post("/ingest")
+@app.post("/ingest", dependencies=[Depends(get_current_user)])
 async def ingest_data(req: IngestRequest):
     schema = table_schemas[req.table]
 
@@ -148,7 +207,7 @@ async def ingest_data(req: IngestRequest):
 # -----------------------------------------------------------------------------
 # /backup
 # -----------------------------------------------------------------------------
-@app.get("/backup")
+@app.get("/backup", dependencies=[Depends(get_current_user)])
 async def backup_all():
     results = {}
     for tbl in table_schemas:
@@ -162,7 +221,7 @@ async def backup_all():
 # -----------------------------------------------------------------------------
 # /backup list
 # -----------------------------------------------------------------------------
-@app.get("/backup/{table_name}/timestamps")
+@app.get("/backup/{table_name}/timestamps", dependencies=[Depends(get_current_user)])
 async def get_timestamps(table_name: str):
     if table_name not in table_schemas:
         raise HTTPException(404, f"Unknown table '{table_name}'")
@@ -175,7 +234,7 @@ async def get_timestamps(table_name: str):
 # -----------------------------------------------------------------------------
 # /restore to timestamp
 # -----------------------------------------------------------------------------
-@app.post("/restore/{table_name}/{timestamp}")
+@app.post("/restore/{table_name}/{timestamp}", dependencies=[Depends(get_current_user)])
 async def restore_from_backup(table_name: str, timestamp: str):
     if table_name not in table_schemas:
         raise HTTPException(404, f"Unknown table '{table_name}'")
