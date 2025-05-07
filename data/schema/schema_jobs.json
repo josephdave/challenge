@@ -10,7 +10,7 @@
       {
         "name": "job",
         "type": "string",
-        "nullable": true,
+        "nullable": false,
         "metadata": {}
       }
     ]

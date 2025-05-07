@@ -10,25 +10,25 @@
       {
         "name": "name",
         "type": "string",
-        "nullable": true,
+        "nullable": false,
         "metadata": {}
       },
       {
         "name": "datetime",
         "type": "timestamp",
-        "nullable": true,
+        "nullable": false,
         "metadata": {}
       },
       {
         "name": "department_id",
         "type": "integer",
-        "nullable": true,
+        "nullable": false,
         "metadata": {}
       },
       {
         "name": "job_id",
         "type": "integer",
-        "nullable": true,
+        "nullable": false,
         "metadata": {}
       }
     ]

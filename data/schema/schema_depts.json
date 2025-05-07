@@ -10,7 +10,7 @@
     {
       "name": "department",
       "type": "string",
-      "nullable": true,
+      "nullable": false,
       "metadata": {}
     }
   ]
