@@ -1,6 +1,6 @@
 # Data Migration and Backup API
 
-This project provides a FastAPI-based service for data ingestion, backup, and restoration using PySpark and MySQL. It includes functionality to migrate CSV data to a MySQL database, perform backups, and restore data from backups.
+This project provides a FastAPI-based service for data ingestion, backup, and restoration using PySpark and MySQL. It includes functionality to migrate CSV data to a MySQL database, perform backups, and restore data from backups. The API also includes secure authentication using JWT tokens.
 
 ## Features
 
@@ -8,6 +8,7 @@ This project provides a FastAPI-based service for data ingestion, backup, and re
 - **Backup**: Create backups of MySQL tables.
 - **Restore**: Restore tables from specific backup timestamps.
 - **Schema Management**: Load table schemas dynamically from JSON files.
+- **Secure Authentication**: OAuth2 with JWT for secure access to endpoints.
 
 ## Requirements
 
@@ -39,6 +40,12 @@ This project provides a FastAPI-based service for data ingestion, backup, and re
    SPARK_MYSQL_JAR=C:\spark-3.5.5-bin-hadoop3\jars\mysql-connector-j-8.0.33.jar
    SCHEMA_PATH=data/schema
    CSV_PATH=data/csv
+   SECRET_KEY=<your-secret-key>
+   ALGORITHM=HS256
+   ACCESS_TOKEN_EXPIRE_MINUTES=30
+   USER=<your-username>
+   PASSWORD=<your-password>
+   ```
 
 4. Place your schema JSON files in the `data/schema` directory and your CSV files in the `data/csv` directory.
 
@@ -55,6 +62,24 @@ The API will be available at `http://127.0.0.1:8000`.
 
 ### Endpoints
 
+#### **Token Endpoint**
+- **POST** `/token`
+- **Description**: Obtain a JWT token for authentication.
+- **Request Body** (form-data example):
+  ```bash
+  curl -X POST http://l27.0.0.1:8000/token \
+    -F "username=<username>" \
+    -F "password=<password>>"
+  ```
+  ```
+- **Response**:
+  ```json
+  {
+    "access_token": "your-jwt-token",
+    "token_type": "bearer"
+  }
+  ```
+
 #### **Ingest Data**
 - **POST** `/ingest`
 - **Description**: Insert data into a MySQL table.
@@ -67,25 +92,34 @@ The API will be available at `http://127.0.0.1:8000`.
     ]
   }
   ```
+- **Authentication**: Requires a valid JWT token in the `Authorization` header.
 
 #### **Backup All Tables**
 - **GET** `/backup`
 - **Description**: Create backups for all tables.
+- **Authentication**: Requires a valid JWT token in the `Authorization` header.
 
 #### **List Backup Timestamps**
 - **GET** `/backup/{table_name}/timestamps`
 - **Description**: List available backup timestamps for a table.
+- **Authentication**: Requires a valid JWT token in the `Authorization` header.
 
 #### **Restore Table**
 - **POST** `/restore/{table_name}/{timestamp}`
 - **Description**: Restore a table to a specific backup timestamp.
+- **Authentication**: Requires a valid JWT token in the `Authorization` header.
 
 ### Data Migration Script
 
 The `spark/migration.py` script migrates CSV data to MySQL tables. Run it as follows:
 ```bash
-python migration.py
+python spark/migration.py
 ```
+
+## Security
+
+- **Authentication**: All endpoints (except `/token`) require a valid JWT token for access.
+- **Environment Variables**: Sensitive information such as database credentials and secret keys are stored in the `.env` file and loaded securely.
 
 ## Project Structure
 
@@ -107,4 +141,3 @@ python migration.py
 ## License
 
 This project is licensed under the MIT License.
-```
