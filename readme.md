@@ -9,6 +9,7 @@ This project provides a FastAPI-based service for data ingestion, backup, and re
 - **Restore**: Restore tables from specific backup timestamps.
 - **Schema Management**: Load table schemas dynamically from JSON files.
 - **Secure Authentication**: OAuth2 with JWT for secure access to endpoints.
+- **Reports and Metrics**: Generate visual and tabular reports for hiring data and department performance.
 
 ## Requirements
 
@@ -108,6 +109,50 @@ The API will be available at `http://127.0.0.1:8000`.
 - **POST** `/restore/{table_name}/{timestamp}`
 - **Description**: Restore a table to a specific backup timestamp.
 - **Authentication**: Requires a valid JWT token in the `Authorization` header.
+
+#### **Metrics: Hiring Quarterly**
+- **GET** `/metrics/hiring_quarterly/{target_year}`
+- **Description**: Retrieve the number of hires per quarter by department and job for a specific year.
+- **Response**:
+  ```json
+  {
+    "year": 2021,
+    "data": [
+      { "department": "Engineering", "job": "Developer", "quarter": 1, "count": 10 },
+      { "department": "HR", "job": "Recruiter", "quarter": 2, "count": 5 }
+    ]
+  }
+  ```
+
+#### **Report: Hiring Quarterly (HTML)**
+![Image](https://github.com/user-attachments/assets/520d633a-8441-45b8-a46c-fecb931d55bb)
+- **GET** `/reports/hiring.html`
+- **Description**: Generate a visual report (stacked bar chart) of hires per quarter by department for a specific year.
+- **Query Parameters**:
+  - `year`: The year to report on (default: 2021).
+- **Response**: HTML page with an embedded chart.
+
+#### **Metrics: Departments Above Average**
+- **GET** `/metrics/departments_above_average/{year_int}`
+- **Description**: Retrieve departments with above-average hires for a specific year.
+- **Response**:
+  ```json
+  {
+    "year": 2021,
+    "data": [
+      { "id": 1, "department": "Engineering", "count": 50 },
+      { "id": 2, "department": "HR", "count": 30 }
+    ]
+  }
+  ```
+
+#### **Report: Departments Above Average (HTML)**
+![Image](https://github.com/user-attachments/assets/2c0e04f1-b116-46d7-9fe6-440c91076120)
+- **GET** `/reports/departments_above_average.html`
+- **Description**: Generate a visual report (pie chart) of departments with above-average hires for a specific year.
+- **Query Parameters**:
+  - `year`: The year to report on (default: 2021).
+- **Response**: HTML page with an embedded chart.
 
 ### Data Migration Script
 
