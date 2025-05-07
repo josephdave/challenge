@@ -10,7 +10,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 from pyspark.sql.types import TimestampType
 from pyspark.sql.functions import to_timestamp, col
-from spark.backup_service import backup_table  
+from spark.backup_service import backup_table, list_backup_timestamps, restore_table 
 
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
@@ -157,3 +157,32 @@ async def backup_all():
         except Exception as e:
             results[tbl] = f"error: {e}"
     return {"status": "success", "backups": results}
+
+
+# -----------------------------------------------------------------------------
+# /backup list
+# -----------------------------------------------------------------------------
+@app.get("/backup/{table_name}/timestamps")
+async def get_timestamps(table_name: str):
+    if table_name not in table_schemas:
+        raise HTTPException(404, f"Unknown table '{table_name}'")
+    try:
+        ts = list_backup_timestamps(table_name)
+    except FileNotFoundError as e:
+        raise HTTPException(404, detail=str(e))
+    return {"table": table_name, "timestamps": ts}
+
+# -----------------------------------------------------------------------------
+# /restore to timestamp
+# -----------------------------------------------------------------------------
+@app.post("/restore/{table_name}/{timestamp}")
+async def restore_from_backup(table_name: str, timestamp: str):
+    if table_name not in table_schemas:
+        raise HTTPException(404, f"Unknown table '{table_name}'")
+    try:
+        restore_table(table_name, timestamp)
+    except FileNotFoundError as e:
+        raise HTTPException(404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(500, detail=f"Restore failed: {e}")
+    return {"status": "success", "table": table_name, "restored_from": timestamp}

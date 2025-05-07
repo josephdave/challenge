@@ -63,3 +63,48 @@ def backup_table(table_name: str) -> Path:
     )
 
     return out_dir
+
+# ----------------------------------------------------------
+# list backup timestamps for a table
+# ----------------------------------------------------------
+def list_backup_timestamps(table_name: str) -> list[str]:
+    tbl_dir = BACKUP_BASE_DIR / table_name
+    if not tbl_dir.is_dir():
+        raise FileNotFoundError(f"No backups found for table '{table_name}'")
+    return sorted(
+        p.name
+        for p in tbl_dir.iterdir()
+        if p.is_dir()
+    )
+
+
+# ----------------------------------------------------------
+# Restore table from a backup timestamp
+# ----------------------------------------------------------
+def restore_table(table_name: str, timestamp: str) -> None:
+    backup_path = BACKUP_BASE_DIR / table_name / timestamp
+    if not backup_path.is_dir():
+        raise FileNotFoundError(
+            f"Backup '{timestamp}' for table '{table_name}' not found"
+        )
+
+    df = spark.read.format("avro").load(str(backup_path))
+
+    jdbc_url = os.getenv("DATABASE_URL")
+    props = {
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASS", ""),
+        "driver": "com.mysql.cj.jdbc.Driver"
+    }
+
+    (
+        df.write
+          .format("jdbc")
+          .option("url", jdbc_url)
+          .option("dbtable", table_name)
+          .option("user", props["user"])
+          .option("password", props["password"])
+          .option("driver", props["driver"])
+          .mode("overwrite")
+          .save()
+    )
