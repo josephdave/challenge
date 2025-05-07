@@ -10,6 +10,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 from pyspark.sql.types import TimestampType
 from pyspark.sql.functions import to_timestamp, col
+from spark.backup_service import backup_table  
 
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
@@ -143,3 +144,16 @@ async def ingest_data(req: IngestRequest):
         raise HTTPException(status_code=500, detail=f"Error writing to database: {str(e)}")
 
     return {"status": "success", "ingested": len(req.rows)}
+
+# -----------------------------------------------------------------------------
+# /backup
+# -----------------------------------------------------------------------------
+@app.get("/backup")
+async def backup_all():
+    results = {}
+    for tbl in table_schemas:
+        try:
+            results[tbl] = str(backup_table(tbl))
+        except Exception as e:
+            results[tbl] = f"error: {e}"
+    return {"status": "success", "backups": results}

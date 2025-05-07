@@ -103,3 +103,4 @@ venv.bak/
 Thumbs.db
 
 temp/*
+data/backups/*
