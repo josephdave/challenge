@@ -10,7 +10,7 @@ from pyspark.sql.types import (
     IntegerType, StringType
 )
 
-def migrate_csv_to_sql(csv_path: str, table_name: str,schema=None):
+def migrate_csv_to_sql(csv_path: str, table_name: str, schema=None):
 
     jdbc_url = os.getenv("DATABASE_URL")
     props = {
@@ -27,16 +27,15 @@ def migrate_csv_to_sql(csv_path: str, table_name: str,schema=None):
         .config("spark.jars", os.getenv("SPARK_MYSQL_JAR", "C:\spark-3.5.5-bin-hadoop3\jars\mysql-connector-j-8.0.33.jar")) \
         .getOrCreate()
     
-    # Cargar datos desde CSV
+    # Load data from CSV
     reader = spark.read.option("header", False)
     if schema is not None:
         reader = reader.schema(schema)
     df = reader.csv(csv_path)
 
-    # Validaciones básicas: eliminar filas con valores nulos
     df_clean = df.dropna()
 
-    # Insertar en la tabla destino
+    # Insert into the target table
     df_clean.write.jdbc(
         url=jdbc_url,
         table=table_name,
@@ -50,13 +49,12 @@ def load_schema_from_json(path: str) -> StructType:
     return StructType.fromJson(schema_dict)
     
 if __name__ == "__main__":
-    # Parámetros tomados de variables de entorno (MySQL)
-    # DATABASE_URL example: jdbc:mysql://host:3306/dbname
+    # Parameters taken from environment variables (MySQL)
     root_dir = Path(__file__).resolve().parent.parent
     dotenv_path = root_dir / ".env"
     load_dotenv(dotenv_path=dotenv_path)
 
-    #MIGRACION DE EMPLEADOS
+    # MIGRATION OF EMPLOYEES
     schema_hired = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_hired_employees.json"),)
     # schema_hired = StructType([
     #     StructField("id", IntegerType(), False),
@@ -72,7 +70,7 @@ if __name__ == "__main__":
         schema=schema_hired,
     )
 
-    # MIGRACION DE DEPARTAMENTOS
+    # MIGRATION OF DEPARTMENTS
     schema_depts = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_depts.json"),)
     # schema_depts = StructType([
     #     StructField("id", IntegerType(), False),
@@ -85,7 +83,7 @@ if __name__ == "__main__":
         schema=schema_depts
     )
 
-    # MIGRACION DE CARGOS
+    # MIGRATION OF JOBS
     schema_jobs = load_schema_from_json(os.path.join(os.getenv("SCHEMA_PATH", "data/schema"), "schema_jobs.json"),)
     # schema_jobs = StructType([
     #     StructField("id", IntegerType(), False),
