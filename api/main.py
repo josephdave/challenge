@@ -23,10 +23,16 @@ import io
 import base64
 import numpy as np 
 
+app = FastAPI(title="API")
+
+basedir = Path(__file__).resolve().parent
+env_path = basedir / '.env'
+load_dotenv(dotenv_path=env_path)
+
+print("sys.executable ->", sys.executable)
+
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
-
-app = FastAPI(title="API")
 
 
 spark = (
@@ -40,18 +46,11 @@ spark = (
     .getOrCreate()
 )
 
-basedir = Path(__file__).resolve().parent
-env_path = basedir / '.env'
-load_dotenv(dotenv_path=env_path)
-
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 USER = os.getenv("USER")
 PASSWORD = os.getenv("PASSWORD")
-
-print(USER)
-print(PASSWORD)
 
 if not (SECRET_KEY and USER and PASSWORD):
     raise RuntimeError("SECRET_KEY, USER, and PASSWORD must be set in .env")
