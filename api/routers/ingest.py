@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import json
@@ -64,6 +65,11 @@ class IngestRequest(BaseModel):
             raise ValueError(f"Unknown table '{table}'. Available: {list(table_schemas)}")
         return values
 
+logger = logging.getLogger("ingest_errors")
+logger.setLevel(logging.ERROR)
+handler = logging.FileHandler("ingest_errors.log")
+handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+logger.addHandler(handler)
 
 # -----------------------------------------------------------------------------
 # /ingest
@@ -76,6 +82,7 @@ async def ingest_data(req: IngestRequest):
     for row in req.rows:
         for field in schema.fields:
             if field.name not in row and not field.nullable:
+                logger.error(f"Table={req.table} Invalid row: {row} Field '{field.name}' is required but missing in input data")
                 raise HTTPException(
                     status_code=422, 
                     detail=f"Field '{field.name}' is required but missing in input data"
@@ -89,6 +96,7 @@ async def ingest_data(req: IngestRequest):
             if not field.nullable:
                 null_count = raw_df.filter(col(field.name).isNull()).count()
                 if null_count > 0:
+                    logger.error(f"Table={req.table} Invalid Field '{field.name}' contains null values but is defined as non-nullable")
                     raise HTTPException(
                         status_code=422, 
                         detail=f"Field '{field.name}' contains null values but is defined as non-nullable"
