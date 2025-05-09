@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import os
 import sys
 import json
+import logging
 from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
@@ -34,6 +35,16 @@ print("sys.executable ->", sys.executable)
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 
+# --------------------------------------------------
+# set up a module-level logger
+logger = logging.getLogger("ingest")
+if not logger.handlers:
+    fh = logging.FileHandler("ingest_errors.log")
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    fh.setFormatter(fmt)
+    logger.addHandler(fh)
+    logger.setLevel(logging.INFO)
+# --------------------------------------------------
 
 spark = (
     SparkSession.builder
@@ -139,30 +150,24 @@ class IngestRequest(BaseModel):
 async def ingest_data(req: IngestRequest):
     schema = table_schemas[req.table]
 
-    # Fiel required check
     for row in req.rows:
         for field in schema.fields:
-            # Si el campo no está en los datos y no es nullable
             if field.name not in row and not field.nullable:
-                raise HTTPException(
-                    status_code=422, 
-                    detail=f"Field '{field.name}' is required but missing in input data"
-                )
-    
-    
-    raw_df = spark.createDataFrame(req.rows)
-    
-    # Timestamp conversion
+                msg = f"Missing required field '{field.name}' in row: {row}"
+                logger.error(msg)
+                raise HTTPException(status_code=422, detail=msg)
+
+    raw_df = SparkSession.builder.getOrCreate().createDataFrame(req.rows)
+
     for field in schema.fields:
         if field.name in raw_df.columns and isinstance(field.dataType, TimestampType):
             if not field.nullable:
                 null_count = raw_df.filter(col(field.name).isNull()).count()
                 if null_count > 0:
-                    raise HTTPException(
-                        status_code=422, 
-                        detail=f"Field '{field.name}' contains null values but is defined as non-nullable"
-                    )
-            
+                    msg = f"Field '{field.name}' contains nulls but is non-nullable—rows: {null_count}"
+                    logger.error(msg)
+                    raise HTTPException(status_code=422, detail=msg)
+
             raw_df = raw_df.withColumn(
                 field.name,
                 to_timestamp(col(field.name), "yyyy-MM-dd HH:mm:ss")
@@ -170,36 +175,36 @@ async def ingest_data(req: IngestRequest):
 
     try:
         raw_df.createOrReplaceTempView("temp_data")
-        
-        # SQL Data conversion
         select_parts = []
         for field in schema.fields:
             if field.name in raw_df.columns:
                 if isinstance(field.dataType, TimestampType):
-                    select_parts.append(f"to_timestamp(`{field.name}`, 'yyyy-MM-dd HH:mm:ss') as `{field.name}`")
+                    select_parts.append(
+                        f"to_timestamp(`{field.name}`, 'yyyy-MM-dd HH:mm:ss') as `{field.name}`"
+                    )
                 else:
-                    select_parts.append(f"CAST(`{field.name}` AS {field.dataType.simpleString()}) as `{field.name}`")
+                    select_parts.append(
+                        f"CAST(`{field.name}` AS {field.dataType.simpleString()}) as `{field.name}`"
+                    )
             elif field.nullable:
                 select_parts.append(f"NULL as `{field.name}`")
-        
-        select_expr = ", ".join(select_parts)
-        df = spark.sql(f"SELECT {select_expr} FROM temp_data")
-        
-        print("Schema after conversion:")
-        df.printSchema()
-        
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Schema validation error: {str(e)}")
 
-    # Database writing
-    jdbc_url = os.getenv("DATABASE_URL")
-    props = {
-        "user": os.getenv("DB_USER"),
-        "password": os.getenv("DB_PASS", ""),
-        "driver": "com.mysql.cj.jdbc.Driver"
-    }
-    
+        df = SparkSession.builder.getOrCreate().sql(
+            f"SELECT {', '.join(select_parts)} FROM temp_data"
+        )
+    except Exception as e:
+        msg = f"Schema validation error: {e}"
+        logger.error(msg, exc_info=True)
+        raise HTTPException(status_code=422, detail=msg)
+
+    # 5) Write to DB
     try:
+        jdbc_url = os.getenv("DATABASE_URL")
+        props = {
+            "user": os.getenv("DB_USER"),
+            "password": os.getenv("DB_PASS", ""),
+            "driver": "com.mysql.cj.jdbc.Driver"
+        }
         df.write.jdbc(
             url=jdbc_url,
             table=req.table,
@@ -207,7 +212,9 @@ async def ingest_data(req: IngestRequest):
             properties=props
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error writing to database: {str(e)}")
+        msg = f"Error writing to database: {e}"
+        logger.error(msg, exc_info=True)
+        raise HTTPException(status_code=500, detail=msg)
 
     return {"status": "success", "ingested": len(req.rows)}
 
